@@ -1,0 +1,51 @@
+{
+  "name": "multiplatform-chat-viewer",
+  "version": "1.0.0",
+  "description": "Unified chat viewer for Twitch, YouTube, TikTok, and Kick",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "build": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "build": {
+    "appId": "com.chatviewer.multiplatform",
+    "productName": "Chat Viewer",
+    "win": {
+      "target": [
+        { "target": "nsis",     "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Chat Viewer"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "GamingUtopiadfgc",
+      "repo": "Multi-platform-chat-viewer"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "src/**/*",
+      "package.json"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.4",
+    "tmi.js": "^1.8.5",
+    "tiktok-live-connector": "^1.2.1",
+    "youtube-chat": "^2.1.3",
+    "ws": "^8.17.0"
+  }
+}
