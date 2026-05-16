@@ -24,12 +24,13 @@ class KickChat extends EventEmitter {
     this.connections = new Map(); // slug → { ws, pingTimer }
   }
 
-  async _fetchChatroomId(slug) {
-    // Check persistent cache first
+  async _fetchChannelInfo(slug) {
     const cache = loadCache();
-    if (cache[slug]) return cache[slug];
+    const cached = cache[slug];
+    // Handle legacy cache entries (plain number = chatroomId only)
+    if (typeof cached === 'number') return { chatroomId: cached, channelId: null };
+    if (cached && typeof cached === 'object' && cached.chatroomId) return cached;
 
-    // Try API v2 first; fall back to scraping the channel page if blocked
     const apiUrl = `https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`;
     const pageUrl = `https://kick.com/${encodeURIComponent(slug)}`;
     const headers = {
@@ -39,7 +40,7 @@ class KickChat extends EventEmitter {
       Referer: 'https://kick.com/',
     };
 
-    // Try API
+    // Try API — returns both channel ID and chatroom ID
     try {
       const res = await fetch(apiUrl, {
         signal: AbortSignal.timeout(8000),
@@ -47,25 +48,49 @@ class KickChat extends EventEmitter {
       });
       if (res.ok) {
         const data = await res.json();
-        const id = data && data.chatroom && data.chatroom.id;
-        if (id) { cache[slug] = id; saveCache(cache); return id; }
+        const chatroomId = data && data.chatroom && data.chatroom.id;
+        const channelId  = data && data.id;
+        if (chatroomId) {
+          const info = { chatroomId, channelId: channelId || null };
+          cache[slug] = info;
+          saveCache(cache);
+          return info;
+        }
       }
     } catch { /* fall through to page scrape */ }
 
-    // Scrape channel page for chatroom ID
+    // Scrape channel page for chatroom ID (channelId unavailable)
     const pageRes = await fetch(pageUrl, { signal: AbortSignal.timeout(10000), headers });
     if (!pageRes.ok) throw new Error(`Kick channel "${slug}" not found (HTTP ${pageRes.status})`);
     const html = await pageRes.text();
 
-    // Look for chatroomId in the page data
     const m = html.match(/"chatroom":\s*\{[^}]*"id"\s*:\s*(\d+)/)
            || html.match(/"chatroom_id"\s*:\s*(\d+)/)
            || html.match(/chatrooms\.(\d+)\.v2/);
     if (!m) throw new Error(`Could not find chatroom ID for Kick channel "${slug}" on page`);
-    const id = parseInt(m[1], 10);
-    cache[slug] = id;
+    const chatroomId = parseInt(m[1], 10);
+    const info = { chatroomId, channelId: null };
+    cache[slug] = info;
     saveCache(cache);
-    return id;
+    return info;
+  }
+
+  async _fetchViewers(slug) {
+    try {
+      const res = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(slug)}`, {
+        signal: AbortSignal.timeout(8000),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Accept: 'application/json',
+        },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const viewers = data && data.livestream && data.livestream.viewer_count;
+      if (typeof viewers === 'number') {
+        this.emit('viewers', { platform: 'kick', channel: slug, viewers });
+      }
+    } catch { /* ignore */ }
   }
 
   async connect(channelSlug) {
@@ -79,9 +104,9 @@ class KickChat extends EventEmitter {
     // Mark as pending immediately to prevent duplicate connect calls
     this.connections.set(slug, null);
 
-    let chatroomId;
+    let chatroomId, channelId;
     try {
-      chatroomId = await this._fetchChatroomId(slug);
+      ({ chatroomId, channelId } = await this._fetchChannelInfo(slug));
     } catch (err) {
       this.connections.delete(slug);
       throw err;
@@ -92,7 +117,7 @@ class KickChat extends EventEmitter {
       `?protocol=7&client=js&version=8.0.0&flash=false`;
 
     const ws = new WebSocket(wsUrl, { headers: { Origin: 'https://kick.com' } });
-    const entry = { ws, pingTimer: null };
+    const entry = { ws, pingTimer: null, viewerTimer: null, connected: false, chatroomId, channelId };
     this.connections.set(slug, entry);
 
     ws.on('open', () => {
@@ -101,6 +126,14 @@ class KickChat extends EventEmitter {
         event: 'pusher:subscribe',
         data: { auth: '', channel: `chatrooms.${chatroomId}.v2` },
       }));
+
+      // Also subscribe to the channel events stream (subscriptions, gifts, follows)
+      if (channelId) {
+        ws.send(JSON.stringify({
+          event: 'pusher:subscribe',
+          data: { auth: '', channel: `channel.${channelId}` },
+        }));
+      }
 
       // Keep-alive: respond to server pings and send our own every 60 s
       entry.pingTimer = setInterval(() => {
@@ -119,7 +152,13 @@ class KickChat extends EventEmitter {
           break;
 
         case 'pusher_internal:subscription_succeeded':
-          this.emit('status', { platform: 'kick', channel: slug, status: 'connected' });
+          // Emit connected only once (on first subscription succeeded)
+          if (!entry.connected) {
+            entry.connected = true;
+            this.emit('status', { platform: 'kick', channel: slug, status: 'connected' });
+            this._fetchViewers(slug);
+            entry.viewerTimer = setInterval(() => this._fetchViewers(slug), 60_000);
+          }
           break;
 
         case 'pusher:ping':
@@ -147,6 +186,47 @@ class KickChat extends EventEmitter {
           break;
         }
 
+        case 'App\\Events\\SubscriptionEvent': {
+          let sub;
+          try { sub = typeof packet.data === 'string' ? JSON.parse(packet.data) : packet.data; } catch { return; }
+          this.emit('event', {
+            platform: 'kick', channel: slug,
+            type: 'subscribe',
+            user: sub.username || sub.user?.username || 'Someone',
+            months: sub.months || null,
+            timestamp: Date.now(),
+          });
+          break;
+        }
+
+        case 'App\\Events\\GiftedSubscriptionsEvent': {
+          let gift;
+          try { gift = typeof packet.data === 'string' ? JSON.parse(packet.data) : packet.data; } catch { return; }
+          const giftCount = (gift.gifted_usernames && gift.gifted_usernames.length) || gift.quantity || 1;
+          this.emit('event', {
+            platform: 'kick', channel: slug,
+            type: 'gift',
+            user: gift.gifter_username || 'Someone',
+            count: giftCount,
+            timestamp: Date.now(),
+          });
+          break;
+        }
+
+        case 'App\\Events\\FollowersUpdated': {
+          let follow;
+          try { follow = typeof packet.data === 'string' ? JSON.parse(packet.data) : packet.data; } catch { return; }
+          if (follow.username) {
+            this.emit('event', {
+              platform: 'kick', channel: slug,
+              type: 'follow',
+              user: follow.username,
+              timestamp: Date.now(),
+            });
+          }
+          break;
+        }
+
         default:
           break;
       }
@@ -155,6 +235,7 @@ class KickChat extends EventEmitter {
     ws.on('close', (code, reason) => {
       console.log('[kick] WebSocket closed', code, reason.toString());
       clearInterval(entry.pingTimer);
+      clearInterval(entry.viewerTimer);
       this.connections.delete(slug);
       this.emit('status', { platform: 'kick', channel: slug, status: 'disconnected' });
     });
@@ -170,6 +251,7 @@ class KickChat extends EventEmitter {
     const entry = this.connections.get(slug);
     if (entry) {
       clearInterval(entry.pingTimer);
+      clearInterval(entry.viewerTimer);
       entry.ws.close();
     }
     if (this.connections.has(slug)) {

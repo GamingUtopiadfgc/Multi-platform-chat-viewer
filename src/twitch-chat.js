@@ -38,6 +38,69 @@ class TwitchChat extends EventEmitter {
       });
     });
 
+    client.on('subscription', (_ch, username, _method, message, userstate) => {
+      this.emit('event', {
+        platform: 'twitch', channel: name,
+        type: 'subscribe',
+        user: userstate['display-name'] || username,
+        message: message || '',
+        timestamp: Date.now(),
+      });
+    });
+
+    client.on('resub', (_ch, username, months, message, userstate) => {
+      this.emit('event', {
+        platform: 'twitch', channel: name,
+        type: 'resub',
+        user: userstate['display-name'] || username,
+        months,
+        message: message || '',
+        timestamp: Date.now(),
+      });
+    });
+
+    client.on('subgift', (_ch, username, _streak, recipient, _methods, userstate) => {
+      this.emit('event', {
+        platform: 'twitch', channel: name,
+        type: 'gift',
+        user: userstate['display-name'] || username,
+        recipient,
+        count: 1,
+        timestamp: Date.now(),
+      });
+    });
+
+    client.on('submysterygift', (_ch, username, count, _methods, userstate) => {
+      this.emit('event', {
+        platform: 'twitch', channel: name,
+        type: 'gift',
+        user: userstate['display-name'] || username,
+        count,
+        timestamp: Date.now(),
+      });
+    });
+
+    client.on('raiding', (_ch, username, viewers) => {
+      this.emit('event', {
+        platform: 'twitch', channel: name,
+        type: 'raid',
+        user: username,
+        count: viewers,
+        timestamp: Date.now(),
+      });
+    });
+
+    client.on('cheer', (_ch, userstate, message) => {
+      this.emit('event', {
+        platform: 'twitch', channel: name,
+        type: 'cheer',
+        user: userstate['display-name'] || userstate.username,
+        count: userstate.bits,
+        message: message || '',
+        timestamp: Date.now(),
+      });
+    });
+
     client.on('disconnected', (reason) => {
       this.emit('status', { platform: 'twitch', channel: name, status: 'disconnected', reason });
       this.clients.delete(name);

@@ -28,12 +28,14 @@ contextBridge.exposeInMainWorld('chatAPI', {
   onStatus:  (cb) => ipcRenderer.on('chat:status',  (_, status) => cb(status)),
   onError:   (cb) => ipcRenderer.on('chat:error',   (_, err)    => cb(err)),
   onViewers: (cb) => ipcRenderer.on('chat:viewers', (_, data)   => cb(data)),
+  onEvent:   (cb) => ipcRenderer.on('chat:event',   (_, data)   => cb(data)),
 
   removeAllListeners: () => {
     ipcRenderer.removeAllListeners('chat:message');
     ipcRenderer.removeAllListeners('chat:status');
     ipcRenderer.removeAllListeners('chat:error');
     ipcRenderer.removeAllListeners('chat:viewers');
+    ipcRenderer.removeAllListeners('chat:event');
   },
 
   // Auto-update

@@ -50,6 +50,11 @@ function forwardEvents(instance) {
       mainWindow.webContents.send('chat:viewers', data);
     }
   });
+  instance.on('event', (data) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('chat:event', data);
+    }
+  });
   instance.on('message', (msg) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('chat:message', msg);

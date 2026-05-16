@@ -42,6 +42,46 @@ class TikTokChat extends EventEmitter {
       });
     });
 
+    conn.on('follow', (data) => {
+      this.emit('event', {
+        platform: 'tiktok', channel: name,
+        type: 'follow',
+        user: data.nickname || data.uniqueId || 'Someone',
+        timestamp: Date.now(),
+      });
+    });
+
+    conn.on('subscribe', (data) => {
+      this.emit('event', {
+        platform: 'tiktok', channel: name,
+        type: 'subscribe',
+        user: data.nickname || data.uniqueId || 'Someone',
+        timestamp: Date.now(),
+      });
+    });
+
+    conn.on('gift', (data) => {
+      // For streaked gifts, only emit when the streak ends
+      if (data.giftType === 1 && !data.repeatEnd) return;
+      this.emit('event', {
+        platform: 'tiktok', channel: name,
+        type: 'gift',
+        user: data.nickname || data.uniqueId || 'Someone',
+        gift: data.giftName || 'Gift',
+        count: data.repeatCount || 1,
+        timestamp: Date.now(),
+      });
+    });
+
+    conn.on('share', (data) => {
+      this.emit('event', {
+        platform: 'tiktok', channel: name,
+        type: 'share',
+        user: data.nickname || data.uniqueId || 'Someone',
+        timestamp: Date.now(),
+      });
+    });
+
     conn.on('roomUser', (data) => {
       if (data && typeof data.viewerCount === 'number') {
         this.emit('viewers', { platform: 'tiktok', channel: name, viewers: data.viewerCount });

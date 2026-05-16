@@ -564,6 +564,32 @@ html, body {
   margin-left: auto;
 }
 
+/* ── Event rows (follow / sub / gift / raid …) ──────────────────────────── */
+.evt {
+  background: rgba(255, 255, 255, 0.025);
+  border-left: 2px solid transparent;
+  font-style: italic;
+}
+.evt-follow    { border-left-color: #ff6b6b; }
+.evt-subscribe { border-left-color: #ffd700; }
+.evt-resub     { border-left-color: #ffd700; }
+.evt-gift      { border-left-color: #ff69b4; }
+.evt-cheer     { border-left-color: #9b59b6; }
+.evt-raid      { border-left-color: #e74c3c; }
+.evt-member    { border-left-color: #2ecc71; }
+.evt-superchat { border-left-color: #f39c12; }
+.evt-share     { border-left-color: #3498db; }
+
+.evt-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-2);
+  word-break: break-word;
+}
+.evt-text strong { color: var(--text); font-style: normal; }
+.evt-icon { margin-right: 2px; font-style: normal; }
+
 /* scroll-to-bottom */
 #scroll-btn {
   position: absolute;

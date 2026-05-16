@@ -425,6 +425,15 @@ window.chatAPI.onMessage((msg) => {
   else scrollBtn.classList.remove('hidden');
 });
 
+/* ── Incoming platform events (follows, subs, gifts, raids…) ─────────────── */
+window.chatAPI.onEvent((evt) => {
+  if (isPaused) return; // skip events while paused to avoid clutter
+  const wasBottom = isNearBottom();
+  renderEvent(evt);
+  if (wasBottom) scrollToBottom();
+  else scrollBtn.classList.remove('hidden');
+});
+
 /* ── Render a single message ─────────────────────────────────────────────── */
 function renderMsg(msg) {
   const p    = PLATFORM[msg.platform];
@@ -498,6 +507,65 @@ function renderMsg(msg) {
 
   feed.appendChild(el);
   pruneMessages();
+}
+
+/* ── Render a platform event (follow / sub / gift / raid …) ─────────────── */
+function renderEvent(evt) {
+  const p    = PLATFORM[evt.platform];
+  const time = new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const el = document.createElement('div');
+  el.className = `msg evt evt-${evt.type}${activeFilter !== 'all' && activeFilter !== evt.platform ? ' hide' : ''}`;
+  el.dataset.platform = evt.platform;
+
+  const badge = document.createElement('span');
+  badge.className = `msg-badge badge-${evt.platform}`;
+  badge.title = `${p.name} › ${esc(evt.channel)}`;
+  badge.textContent = p.label;
+
+  const evtText = document.createElement('span');
+  evtText.className = 'evt-text';
+  evtText.innerHTML = buildEventText(evt);
+
+  const chName = document.createElement('span');
+  chName.className = 'msg-channel';
+  chName.textContent = evt.channel;
+
+  const ts = document.createElement('span');
+  ts.className = 'msg-time';
+  ts.textContent = time;
+
+  el.append(badge, evtText, chName, ts);
+  feed.appendChild(el);
+  pruneMessages();
+}
+
+function buildEventText(evt) {
+  const u = `<strong>${esc(evt.user || 'Someone')}</strong>`;
+  switch (evt.type) {
+    case 'follow':
+      return `<span class="evt-icon">❤</span> ${u} followed`;
+    case 'subscribe':
+      return `<span class="evt-icon">⭐</span> ${u} subscribed${evt.months ? ` (${evt.months} months)` : ''}`;
+    case 'resub':
+      return `<span class="evt-icon">⭐</span> ${u} resubscribed${evt.months ? ` (${evt.months} months)` : ''}${evt.message ? `: ${esc(evt.message)}` : ''}`;
+    case 'gift':
+      if (evt.recipient) return `<span class="evt-icon">🎁</span> ${u} gifted a sub to <strong>${esc(evt.recipient)}</strong>`;
+      if (evt.gift)      return `<span class="evt-icon">🎁</span> ${u} sent ${evt.count > 1 ? `${evt.count}× ` : ''}<strong>${esc(evt.gift)}</strong>`;
+      return `<span class="evt-icon">🎁</span> ${u} gifted ${evt.count || 1} sub${(evt.count || 1) !== 1 ? 's' : ''}`;
+    case 'cheer':
+      return `<span class="evt-icon">💎</span> ${u} cheered <strong>${evt.count}</strong> bits${evt.message ? `: ${esc(evt.message)}` : ''}`;
+    case 'raid':
+      return `<span class="evt-icon">⚡</span> ${u} raided with <strong>${evt.count}</strong> viewers`;
+    case 'member':
+      return `<span class="evt-icon">🏅</span> ${u} became a member${evt.message ? ` — ${esc(evt.message)}` : ''}`;
+    case 'superchat':
+      return `<span class="evt-icon">💰</span> ${u} super chatted${evt.amount ? ` <strong>${esc(evt.amount)}</strong>` : ''}${evt.message ? `: ${esc(evt.message)}` : ''}`;
+    case 'share':
+      return `<span class="evt-icon">↗</span> ${u} shared the stream`;
+    default:
+      return `<span class="evt-icon">📢</span> ${u} — ${esc(evt.type)}`;
+  }
 }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */

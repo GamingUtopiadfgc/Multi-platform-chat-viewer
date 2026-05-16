@@ -97,7 +97,92 @@ class YouTubeChat extends EventEmitter {
       for (let i = 0; i < actions.length; i++) {
         const action = actions[i];
         const item = action && action.addChatItemAction && action.addChatItemAction.item;
-        const renderer = (item && item.liveChatTextMessageRenderer) || (item && item.liveChatPaidMessageRenderer);
+        if (!item) continue;
+
+        // ── Super chat (paid message) ──────────────────────────────────────
+        if (item.liveChatPaidMessageRenderer) {
+          const r = item.liveChatPaidMessageRenderer;
+          if (!conn.seenIds.has(r.id)) {
+            conn.seenIds.add(r.id);
+            const author = (r.authorName && r.authorName.simpleText) || 'Unknown';
+            const amount = (r.purchaseAmountText && r.purchaseAmountText.simpleText) || '';
+            const runs = (r.message && r.message.runs) || [];
+            const text = runs.map(run => run.text || '').join('');
+            this.emit('event', {
+              platform: 'youtube', channel: identifier,
+              type: 'superchat',
+              user: author,
+              amount,
+              message: text,
+              timestamp: Date.now(),
+              id: r.id,
+            });
+          }
+          continue;
+        }
+
+        // ── New member ─────────────────────────────────────────────────────
+        if (item.liveChatMembershipItemRenderer) {
+          const r = item.liveChatMembershipItemRenderer;
+          if (!conn.seenIds.has(r.id)) {
+            conn.seenIds.add(r.id);
+            const author = (r.authorName && r.authorName.simpleText) || 'Unknown';
+            const headerRuns = (r.headerSubtext && r.headerSubtext.runs) || [];
+            const levelName = headerRuns.map(run => run.text || '').join('');
+            this.emit('event', {
+              platform: 'youtube', channel: identifier,
+              type: 'member',
+              user: author,
+              message: levelName,
+              timestamp: Date.now(),
+              id: r.id,
+            });
+          }
+          continue;
+        }
+
+        // ── Gifted memberships ─────────────────────────────────────────────
+        if (item.liveChatSponsorshipsGiftPurchaseAnnouncementRenderer) {
+          const r = item.liveChatSponsorshipsGiftPurchaseAnnouncementRenderer;
+          if (!conn.seenIds.has(r.id)) {
+            conn.seenIds.add(r.id);
+            const author = (r.authorName && r.authorName.simpleText) || 'Unknown';
+            const header = r.header && r.header.liveChatSponsorshipsHeaderRenderer;
+            const primaryRuns = (header && header.primaryText && header.primaryText.runs) || [];
+            const countMatch = primaryRuns.map(run => run.text || '').join('').match(/\d+/);
+            const count = countMatch ? parseInt(countMatch[0], 10) : 1;
+            this.emit('event', {
+              platform: 'youtube', channel: identifier,
+              type: 'gift',
+              user: author,
+              count,
+              timestamp: Date.now(),
+              id: r.id,
+            });
+          }
+          continue;
+        }
+
+        // ── Gifted membership redemption ───────────────────────────────────
+        if (item.liveChatSponsorshipsGiftRedemptionAnnouncementRenderer) {
+          const r = item.liveChatSponsorshipsGiftRedemptionAnnouncementRenderer;
+          if (!conn.seenIds.has(r.id)) {
+            conn.seenIds.add(r.id);
+            const author = (r.authorName && r.authorName.simpleText) || 'Unknown';
+            this.emit('event', {
+              platform: 'youtube', channel: identifier,
+              type: 'member',
+              user: author,
+              message: 'gifted membership',
+              timestamp: Date.now(),
+              id: r.id,
+            });
+          }
+          continue;
+        }
+
+        // ── Regular chat message ───────────────────────────────────────────
+        const renderer = item.liveChatTextMessageRenderer;
         if (!renderer) continue;
 
         const id = renderer.id;
