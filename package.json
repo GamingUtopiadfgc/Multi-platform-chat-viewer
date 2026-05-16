@@ -27,7 +27,8 @@
     "publish": {
       "provider": "github",
       "owner": "GamingUtopiadfgc",
-      "repo": "Multi-platform-chat-viewer"
+      "repo": "Multi-platform-chat-viewer",
+      "releaseType": "release"
     },
     "files": [
       "main.js",
