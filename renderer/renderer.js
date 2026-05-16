@@ -103,11 +103,19 @@ ttsVolSlider.addEventListener('input', () => {
 });
 
 function ttsClean(raw) {
-  // [emote:1579033:emojiAstonished] → "emoji Astonished"
-  return raw
-    .replace(/\[emote:\d+:([^\]]+)\]/g, (_, name) =>
-      name.replace(/([a-z])([A-Z])/g, '$1 $2'))
-    .trim();
+  // Count each emote type across the whole message, then say text + "Name x N"
+  const counts = new Map();
+  const order  = [];
+  const textOnly = raw.replace(/\[emote:\d+:([^\]]+)\]/g, (_, name) => {
+    const label = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+    if (!counts.has(label)) { counts.set(label, 0); order.push(label); }
+    counts.set(label, counts.get(label) + 1);
+    return ' ';
+  }).replace(/\s+/g, ' ').trim();
+
+  if (!order.length) return textOnly;
+  const emoteStr = order.map(n => counts.get(n) > 1 ? `${n} x${counts.get(n)}` : n).join(', ');
+  return textOnly ? `${textOnly}, ${emoteStr}` : emoteStr;
 }
 
 function ttsEnqueue(msg) {
