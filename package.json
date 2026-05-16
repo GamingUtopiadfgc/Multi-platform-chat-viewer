@@ -1,6 +1,6 @@
 {
   "name": "multiplatform-chat-viewer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Unified chat viewer for Twitch, YouTube, TikTok, and Kick",
   "main": "main.js",
   "scripts": {
